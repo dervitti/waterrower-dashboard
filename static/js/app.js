@@ -5,6 +5,7 @@ const MAX_POINTS = 360; // ~6 min at 1 Hz
 const state = {
   users: [],
   selectedUserId: null,
+  editingUserId: null,
   maxHr: null,
   active: false,
   timerRunning: false,
@@ -517,7 +518,14 @@ async function api(path, options = {}) {
   });
   if (res.status === 204) return null;
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || res.statusText);
+  if (!res.ok) {
+    let msg = res.statusText;
+    if (typeof data.detail === "string") msg = data.detail;
+    else if (Array.isArray(data.detail)) {
+      msg = data.detail.map((d) => d.msg || JSON.stringify(d)).join("; ");
+    }
+    throw new Error(msg || "Anfrage fehlgeschlagen");
+  }
   return data;
 }
 
@@ -525,15 +533,15 @@ function openUserForm(user = null) {
   const form = $("userForm");
   form.classList.remove("hidden");
   if (user) {
-    $("editUserId").value = String(user.id);
+    state.editingUserId = user.id;
     $("newUserName").value = user.name || "";
     $("newUserSex").value = user.sex || "";
     $("newUserBirthYear").value = user.birth_year ?? "";
     $("newUserWeight").value = user.weight_kg ?? "";
     $("newUserMaxHr").value = user.max_hr ?? "";
-    $("userFormSubmit").textContent = "Speichern";
+    $("userFormSubmit").textContent = "Änderungen übernehmen";
   } else {
-    $("editUserId").value = "";
+    state.editingUserId = null;
     form.reset();
     $("userFormSubmit").textContent = "Anlegen";
   }
@@ -541,10 +549,30 @@ function openUserForm(user = null) {
 }
 
 function closeUserForm() {
+  state.editingUserId = null;
   $("userForm").reset();
-  $("editUserId").value = "";
   $("userFormSubmit").textContent = "Anlegen";
   $("userForm").classList.add("hidden");
+}
+
+function highlightSelectedUser() {
+  const select = $("userSelect");
+  if (state.selectedUserId != null) {
+    select.value = String(state.selectedUserId);
+  }
+  for (const li of $("userList").querySelectorAll("li")) {
+    li.classList.toggle("active", li.dataset.userId === String(state.selectedUserId));
+  }
+}
+
+async function selectUser(userId, { reloadList = false } = {}) {
+  state.selectedUserId = userId != null ? Number(userId) : null;
+  const u = selectedUser();
+  state.maxHr = userMaxHr(u);
+  if (reloadList) renderUsers();
+  else highlightSelectedUser();
+  renderHrZones();
+  await loadSessions();
 }
 
 function renderUsers() {
@@ -566,6 +594,7 @@ function renderUsers() {
     select.appendChild(opt);
 
     const li = document.createElement("li");
+    li.dataset.userId = String(u.id);
     if (String(u.id) === String(state.selectedUserId)) li.classList.add("active");
     const meta = [
       u.sex === "f" ? "♀" : u.sex === "m" ? "♂" : null,
@@ -601,9 +630,14 @@ function renderUsers() {
     del.onclick = async (e) => {
       e.stopPropagation();
       if (!confirm(`${u.name} wirklich löschen?`)) return;
-      await api(`/api/users/${u.id}`, { method: "DELETE" });
-      await loadUsers();
-      await loadSessions();
+      try {
+        await api(`/api/users/${u.id}`, { method: "DELETE" });
+        if (state.editingUserId === u.id) closeUserForm();
+        await loadUsers();
+        await loadSessions();
+      } catch (err) {
+        $("statusMsg").textContent = err.message || "Löschen fehlgeschlagen";
+      }
     };
 
     actions.appendChild(edit);
@@ -611,12 +645,7 @@ function renderUsers() {
     li.appendChild(actions);
     li.onclick = (e) => {
       if (e.target === del || e.target === edit || actions.contains(e.target)) return;
-      state.selectedUserId = u.id;
-      state.maxHr = userMaxHr(u);
-      select.value = String(u.id);
-      renderUsers();
-      renderHrZones();
-      loadSessions();
+      selectUser(u.id);
     };
     list.appendChild(li);
   }
@@ -835,12 +864,8 @@ async function autoConnectUsbIfPresent(alreadyActive) {
 }
 
 $("userSelect").addEventListener("change", () => {
-  state.selectedUserId = Number($("userSelect").value);
-  const u = state.users.find((x) => String(x.id) === String(state.selectedUserId));
-  state.maxHr = userMaxHr(u);
-  renderUsers();
-  renderHrZones();
-  loadSessions();
+  const id = $("userSelect").value;
+  selectUser(id ? Number(id) : null);
 });
 
 $("btnAddUser").onclick = () => openUserForm();
@@ -853,7 +878,7 @@ $("userForm").onsubmit = async (e) => {
   const birthYear = $("newUserBirthYear").value;
   const weight = $("newUserWeight").value;
   const maxHr = $("newUserMaxHr").value;
-  const editId = $("editUserId").value;
+  const editId = state.editingUserId;
   const body = {
     name,
     sex,
@@ -861,18 +886,27 @@ $("userForm").onsubmit = async (e) => {
     weight_kg: weight ? Number(weight) : null,
     max_hr: maxHr ? Number(maxHr) : null,
   };
-  if (editId) {
-    await api(`/api/users/${editId}`, { method: "PATCH", body: JSON.stringify(body) });
-    state.selectedUserId = Number(editId);
-  } else {
-    const created = await api("/api/users", {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
-    state.selectedUserId = created.id;
+  try {
+    if (editId) {
+      await api(`/api/users/${editId}`, { method: "PATCH", body: JSON.stringify(body) });
+      state.selectedUserId = Number(editId);
+      $("statusMsg").textContent = "User aktualisiert";
+    } else {
+      const created = await api("/api/users", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      state.selectedUserId = created.id;
+      $("statusMsg").textContent = "User angelegt";
+    }
+    closeUserForm();
+    await loadUsers();
+    await loadSessions();
+    renderHrZones();
+  } catch (err) {
+    const detail = err.message || "Speichern fehlgeschlagen";
+    $("statusMsg").textContent = typeof detail === "string" ? detail : "Speichern fehlgeschlagen";
   }
-  closeUserForm();
-  await loadUsers();
 };
 
 $("btnScan").onclick = async () => {

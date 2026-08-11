@@ -2,6 +2,8 @@
 
 Live-Dashboard für WaterRower **S4 + ComModule** mit User-Verwaltung und Session-Speicherung.
 
+**Repo:** [github.com/dervitti/waterrower-dashboard](https://github.com/dervitti/waterrower-dashboard)
+
 ## Was es macht
 
 - Verbindet sich per **Bluetooth LE / FTMS** mit dem WaterRower ComModule

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=WaterRower Dashboard
+Comment=S4 Live-Dashboard (Server + Browser)
+Keywords=rower;waterrower;training;usb;
+Icon=utilities-system-monitor
+Categories=Sports;Utility;
+Terminal=true
+# Pfad wird von scripts/install-launcher.sh gesetzt — oder manuell anpassen:
+Exec=bash -lc 'cd "$HOME/NectcloudOktasilan/Rower" && exec ./start.sh'
+StartupNotify=false

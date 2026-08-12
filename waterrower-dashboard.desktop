@@ -1,11 +1,13 @@
 [Desktop Entry]
 Type=Application
 Name=WaterRower Dashboard
-Comment=S4 Live-Dashboard (Server + Browser)
-Keywords=rower;waterrower;training;usb;
+Comment=S4 Live-Dashboard (USB + Server + Browser)
+Keywords=rower;waterrower;training;usb;s4;
 Icon=utilities-system-monitor
 Categories=Sports;Utility;
 Terminal=true
-# Pfad wird von scripts/install-launcher.sh gesetzt — oder manuell anpassen:
-Exec=bash -lc 'cd "$HOME/NectcloudOktasilan/Rower" && exec ./start.sh'
+# Do not hardcode a machine path here.
+# Install from your clone: bash scripts/install-launcher.sh
+# That writes ~/.local/share/applications/waterrower-dashboard.desktop with Path/Exec set.
+Exec=waterrower
 StartupNotify=false

@@ -1,53 +1,63 @@
 # WaterRower Dashboard
 
-Live-Dashboard für WaterRower **S4 + ComModule** mit User-Verwaltung und Session-Speicherung.
+Live-Dashboard für WaterRower **S4** (USB) mit User-Verwaltung und Session-Speicherung. ComModule/BLE nur experimentell.
 
 **Repo:** [github.com/dervitti/waterrower-dashboard](https://github.com/dervitti/waterrower-dashboard)
 
 ## Was es macht
 
-- Verbindet sich per **Bluetooth LE / FTMS** mit dem WaterRower ComModule
-- Zeigt Live-Metriken: Pace, SPM, Watt, Distanz, Zeit, kcal, Strokes, **Herzfrequenz** (falls im FTMS-Stream enthalten)
+- **Primär:** Verbindet sich per **USB** mit dem S4-Monitor (`/dev/ttyACM*`)
+- Zeigt Live-Metriken: Intensität, Pace, SPM, Distanz, Zeit, kcal, Strokes, **Herzfrequenz** (vom S4, wenn Gurt am Monitor hängt)
 - Mehrere User anlegen und Sessions speichern (SQLite)
 - **Demo-Modus** zum Testen ohne Hardware
+- **Optional / experimentell:** Bluetooth LE / FTMS über ComModule (unter Linux mit alter Firmware nicht für den Alltag geeignet — siehe unten)
 
-## Puls über ComModule
+## Verbindung
 
-Der ANT+-Brustgurt spricht mit dem **S4-Monitor** (über den ANT-Empfänger im Monitor / HR-Kit), nicht direkt mit dem Laptop.
+| Pfad | Status |
+|------|--------|
+| **USB** (Laptop ↔ S4) | **Standard** — zuverlässig unter Linux |
+| **Demo** | Ohne Hardware |
+| **BLE** (ComModule) | Experimentell — siehe Warnung |
+
+### Bluetooth / ComModule (nicht für Produktion)
+
+Desktop-Bluetooth mit ComModule **SW Rev 1.30** funktioniert unter Linux **nicht zuverlässig** und wird **nicht unterstützt**. Handy-Apps können trotzdem gehen.
+
+Empfehlung: **USB-Kabel am S4**, ComModule nicht über die System-Bluetooth-UI koppeln.
+
+## Puls
+
+Der ANT+-Brustgurt spricht mit dem **S4-Monitor** (ANT-Empfänger / HR-Kit), nicht direkt mit dem Laptop.
 
 Voraussetzung:
 
 1. ANT-Empfänger am S4 ist installiert und der Gurt ist mit dem Monitor synchron
 2. Am S4 wird die Herzfrequenz angezeigt
-3. Das ComModule leitet die Daten per FTMS weiter — die HF steckt dann im Feld *Heart Rate* der Rower-Data-Characteristic
+3. Über **USB** liest das Dashboard die HF aus dem S4-Speicher mit
 
-Wenn am S4 Puls sichtbar ist, im Dashboard aber `—` bei BPM: das ComModule sendet die HF in deiner Firmware möglicherweise nicht. Dann später optional ein BT-Pulsgurt oder ANT+-USB-Stick.
+Wenn am S4 Puls sichtbar ist, im Dashboard aber `—` bei BPM: Firmware/Speicheradresse oder Gurt-Sync prüfen. (Über BLE/FTMS leitet das ComModule die HF oft gar nicht weiter.)
 
 ## Starten
 
 Voraussetzung: **Python 3.10+** (`python3 --version` prüfen).
 
-Windows (dieser PC / Nextcloud-Sync):
-`C:\Users\Sebastian\Oktasilan-NextCloud\Rower`
-
-Linux-Laptop (Nextcloud-Client):
-`~/NextcloudOktasilan/Rower` bzw. dein Sync-Pfad
-
-### Linux (empfohlen)
-
 ```bash
-cd ~/NectcloudOktasilan/Rower   # dein Sync-Pfad
+git clone https://github.com/dervitti/waterrower-dashboard.git
+cd waterrower-dashboard
 bash setup.sh                  # einmalig: venv + pip
 ./start.sh                     # venv + Server + Browser
 ```
 
-**dmenu / Anwendungsmenü** (einmalig):
+Browser: [http://127.0.0.1:8000](http://127.0.0.1:8000)
+
+**dmenu / Anwendungsmenü** (einmalig, aus dem Repo-Verzeichnis):
 
 ```bash
 bash scripts/install-launcher.sh
 ```
 
-Danach in dmenu: `waterrower` bzw. „WaterRower Dashboard“.
+Das Skript schreibt den **aktuellen Repo-Pfad** in `~/.local/bin/waterrower` und den Desktop-Eintrag — keine festen Sync-/Home-Pfade im Repo. Danach in dmenu: `waterrower` bzw. „WaterRower Dashboard“.
 
 Nur Server (ohne Browser): `./run.sh`
 
@@ -72,20 +82,24 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Wichtig: `uvicorn` kommt aus der venv — immer zuerst `source .venv/bin/activate`, oder `./run.sh` nutzen.
+Wichtig: `uvicorn` kommt aus der venv — immer zuerst `source .venv/bin/activate`, oder `./run.sh` / `./start.sh` nutzen.
 
-
-Browser: [http://127.0.0.1:8000](http://127.0.0.1:8000)
-
-### Bluetooth unter Linux
-
-- Bluetooth-Dienst aktiv (`bluetoothctl power on`)
-- User in der Gruppe `bluetooth` (oder entsprechendes udev/polkit)
-- ComModule einschalten, bis LED langsam blinkt; am S4 sollte **PC** stehen
+Optional: Port/USB-Gerät per Env — `WR_PORT`, `WR_USB_PORT=/dev/ttyACM0`.
 
 ## Nutzung
 
 1. User anlegen und auswählen
-2. Optional **Scan** für das ComModule
-3. **Start** (echtes Gerät) oder **Demo**
+2. S4 per USB verbinden (Gerät sollte als `/dev/ttyACM*` erscheinen)
+3. **USB** starten (oder **Demo** ohne Hardware)
 4. Nach dem Rudern **Stop** — Session wird gespeichert
+
+### Optional / experimentell (BLE)
+
+Nur wenn du bewusst am ComModule experimentierst (neuere Firmware, kein Alltagspfad):
+
+1. Bluetooth-Dienst aktiv (`bluetoothctl power on`)
+2. User in Gruppe `bluetooth` (oder udev/polkit)
+3. ComModule einschalten; **nicht** über Sway/Blueman fest koppeln
+4. Im UI **Scan** → **Start**
+
+Siehe auch `docs/adr/0001-prefer-usb-on-linux.md` und `scripts/ble_probe.py`.

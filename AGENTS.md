@@ -1,6 +1,8 @@
 # WaterRower Dashboard — Agent notes
 
-Python FastAPI live dashboard for WaterRower **S4** (USB CDC) and **ComModule** (BLE FTMS).
+Python FastAPI live dashboard for WaterRower **S4** (**USB CDC** primary) and optional **ComModule** (BLE FTMS, experimental).
+
+See `CONTEXT.md` and `docs/adr/0001-prefer-usb-on-linux.md`: desktop BLE with ComModule SW **1.30** is **unsupported**; prefer USB.
 
 ## Agent skills
 
@@ -19,9 +21,13 @@ Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
 ## Run (Linux)
 
 ```bash
+git clone https://github.com/dervitti/waterrower-dashboard.git
+cd waterrower-dashboard
+bash setup.sh
 ./start.sh          # venv + uvicorn :8000 + browser
 # or
 ./run.sh
+bash scripts/install-launcher.sh   # optional: dmenu/desktop; bakes this clone's path
 ```
 
-Env: `WR_USB_PORT`, `WR_BLE_ADAPTER`, `WR_BLE_BACKEND=dbus|bleak`.
+Env: `WR_USB_PORT`, `WR_PORT`, `WR_BLE_ADAPTER`, `WR_BLE_BACKEND=dbus|bleak`.

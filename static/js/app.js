@@ -456,10 +456,42 @@ function setActiveUi(active) {
   setWakeLock(active);
 }
 
-/** Bildschirm wach halten (Browser Wake Lock), solange Training läuft. */
+/** Bildschirm wach halten (Browser Wake Lock + stilles Video-Fallback). */
 let wakeLock = null;
+let wakeLockTimer = null;
+let wakeVideo = null;
+
+function ensureWakeVideo() {
+  if (wakeVideo) return wakeVideo;
+  const v = document.createElement("video");
+  v.setAttribute("playsinline", "");
+  v.setAttribute("muted", "");
+  v.muted = true;
+  v.loop = true;
+  v.playsInline = true;
+  v.style.cssText =
+    "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;bottom:0;right:0;";
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, 1, 1);
+  }
+  if (typeof canvas.captureStream === "function") {
+    v.srcObject = canvas.captureStream(1);
+  }
+  document.body.appendChild(v);
+  wakeVideo = v;
+  return v;
+}
 
 async function setWakeLock(on) {
+  if (wakeLockTimer) {
+    clearInterval(wakeLockTimer);
+    wakeLockTimer = null;
+  }
   if (!on) {
     try {
       await wakeLock?.release();
@@ -467,22 +499,50 @@ async function setWakeLock(on) {
       /* ignore */
     }
     wakeLock = null;
+    if (wakeVideo) {
+      try {
+        wakeVideo.pause();
+      } catch (_) {
+        /* ignore */
+      }
+    }
     return;
   }
-  if (!("wakeLock" in navigator)) return;
+  await requestWakeLock();
+  // Manche Browser lassen den Lock still fallen — periodisch erneuern
+  wakeLockTimer = setInterval(() => {
+    if (state.active) requestWakeLock();
+  }, 45000);
+}
+
+async function requestWakeLock() {
+  if (!state.active) return;
+  if (document.visibilityState === "visible" && "wakeLock" in navigator) {
+    try {
+      if (!wakeLock) {
+        wakeLock = await navigator.wakeLock.request("screen");
+        wakeLock.addEventListener("release", () => {
+          wakeLock = null;
+          if (state.active && document.visibilityState === "visible") {
+            requestWakeLock();
+          }
+        });
+      }
+    } catch (err) {
+      console.warn("Wake Lock nicht verfügbar:", err);
+    }
+  }
   try {
-    wakeLock = await navigator.wakeLock.request("screen");
-    wakeLock.addEventListener("release", () => {
-      wakeLock = null;
-    });
+    const v = ensureWakeVideo();
+    if (v.paused) await v.play();
   } catch (err) {
-    console.warn("Wake Lock nicht verfügbar:", err);
+    console.warn("Wake-Video Fallback:", err);
   }
 }
 
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && state.active && !wakeLock) {
-    setWakeLock(true);
+  if (document.visibilityState === "visible" && state.active) {
+    requestWakeLock();
   }
 });
 
